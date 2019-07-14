@@ -63,9 +63,14 @@ struct line_opt_callback_data {
 	struct string_list args;
 };
 
+static int session_is_interactive(void)
+{
+	return isatty(1) || pager_in_use();
+}
+
 static int auto_decoration_style(void)
 {
-	return (isatty(1) || pager_in_use()) ? DECORATE_SHORT_REFS : 0;
+	return session_is_interactive() ? DECORATE_SHORT_REFS : 0;
 }
 
 static int parse_decoration_style(const char *value)
@@ -210,15 +215,8 @@ static void cmd_log_init_finish(int argc, const char **argv, const char *prefix,
 	userformat_find_requirements(NULL, &w);
 
 	if (mailmap < 0) {
-		/*
-		 * Only display the warning if the session is interactive
-		 * and pretty_given is false. We determine that the session
-		 * is interactive by checking if auto_decoration_style()
-		 * returns non-zero.
-		 */
-		if (auto_decoration_style() && !rev->pretty_given)
+		if (session_is_interactive() && !rev->pretty_given)
 			warning("%s\n", _(warn_unspecified_mailmap_msg));
-
 		mailmap = 0;
 	}
 
