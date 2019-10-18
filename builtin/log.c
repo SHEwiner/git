@@ -47,7 +47,7 @@ static int default_follow;
 static int default_show_signature;
 static int decoration_style;
 static int decoration_given;
-static int use_mailmap_config;
+static int use_mailmap_config = 1;
 static const char *fmt_patch_subject_prefix = "PATCH";
 static const char *fmt_pretty;
 
@@ -63,9 +63,14 @@ struct line_opt_callback_data {
 	struct string_list args;
 };
 
+static int session_is_interactive(void)
+{
+	return isatty(1) || pager_in_use();
+}
+
 static int auto_decoration_style(void)
 {
-	return (isatty(1) || pager_in_use()) ? DECORATE_SHORT_REFS : 0;
+	return session_is_interactive() ? DECORATE_SHORT_REFS : 0;
 }
 
 static int parse_decoration_style(const char *value)
@@ -155,7 +160,7 @@ static void cmd_log_init_finish(int argc, const char **argv, const char *prefix,
 			 struct rev_info *rev, struct setup_revision_opt *opt)
 {
 	struct userformat_want w;
-	int quiet = 0, source = 0, mailmap = 0;
+	int quiet = 0, source = 0, mailmap;
 	static struct line_opt_callback_data line_cb = {NULL, NULL, STRING_LIST_INIT_DUP};
 	static struct string_list decorate_refs_exclude = STRING_LIST_INIT_NODUP;
 	static struct string_list decorate_refs_include = STRING_LIST_INIT_NODUP;
@@ -622,6 +627,7 @@ int cmd_show(int argc, const char **argv, const char *prefix)
 			break;
 		case OBJ_TAG: {
 			struct tag *t = (struct tag *)o;
+			struct object_id *oid = get_tagged_oid(t);
 
 			if (rev.shown_one)
 				putchar('\n');
@@ -633,10 +639,10 @@ int cmd_show(int argc, const char **argv, const char *prefix)
 			rev.shown_one = 1;
 			if (ret)
 				break;
-			o = parse_object(the_repository, &t->tagged->oid);
+			o = parse_object(the_repository, oid);
 			if (!o)
 				ret = error(_("could not read object %s"),
-					    oid_to_hex(&t->tagged->oid));
+					    oid_to_hex(oid));
 			objects[i].item = o;
 			i--;
 			break;

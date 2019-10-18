@@ -1161,14 +1161,21 @@ static char *lookup_prog(const char *dir, int dirlen, const char *cmd,
 			 int isexe, int exe_only)
 {
 	char path[MAX_PATH];
+	wchar_t wpath[MAX_PATH];
 	snprintf(path, sizeof(path), "%.*s\\%s.exe", dirlen, dir, cmd);
 
-	if (!isexe && access(path, F_OK) == 0)
+	if (xutftowcs_path(wpath, path) < 0)
+		return NULL;
+
+	if (!isexe && _waccess(wpath, F_OK) == 0)
 		return xstrdup(path);
-	path[strlen(path)-4] = '\0';
-	if ((!exe_only || isexe) && access(path, F_OK) == 0)
-		if (!(GetFileAttributes(path) & FILE_ATTRIBUTE_DIRECTORY))
+	wpath[wcslen(wpath)-4] = '\0';
+	if ((!exe_only || isexe) && _waccess(wpath, F_OK) == 0) {
+		if (!(GetFileAttributesW(wpath) & FILE_ATTRIBUTE_DIRECTORY)) {
+			path[strlen(path)-4] = '\0';
 			return xstrdup(path);
+		}
+	}
 	return NULL;
 }
 
@@ -1229,11 +1236,6 @@ static int wenvcmp(const void *a, const void *b)
 	return _wcsnicmp(p, q, p_len);
 }
 
-/* We need a stable sort to convert the environment between UTF-16 <-> UTF-8 */
-#ifndef INTERNAL_QSORT
-#include "qsort.c"
-#endif
-
 /*
  * Build an environment block combining the inherited environment
  * merged with the given list of settings.
@@ -1265,15 +1267,15 @@ static wchar_t *make_environment_block(char **deltaenv)
 		}
 
 		ALLOC_ARRAY(result, size);
-		memcpy(result, wenv, size * sizeof(*wenv));
+		COPY_ARRAY(result, wenv, size);
 		FreeEnvironmentStringsW(wenv);
 		return result;
 	}
 
 	/*
 	 * If there is a deltaenv, let's accumulate all keys into `array`,
-	 * sort them using the stable git_qsort() and then copy, skipping
-	 * duplicate keys
+	 * sort them using the stable git_stable_qsort() and then copy,
+	 * skipping duplicate keys
 	 */
 	for (p = wenv; p && *p; ) {
 		ALLOC_GROW(array, nr + 1, alloc);
@@ -1296,7 +1298,7 @@ static wchar_t *make_environment_block(char **deltaenv)
 		p += wlen + 1;
 	}
 
-	git_qsort(array, nr, sizeof(*array), wenvcmp);
+	git_stable_qsort(array, nr, sizeof(*array), wenvcmp);
 	ALLOC_ARRAY(result, size + delta_size);
 
 	for (p = result, i = 0; i < nr; i++) {
@@ -1309,7 +1311,7 @@ static wchar_t *make_environment_block(char **deltaenv)
 			continue;
 
 		size = wcslen(array[i]) + 1;
-		memcpy(p, array[i], size * sizeof(*p));
+		COPY_ARRAY(p, array[i], size);
 		p += size;
 	}
 	*p = L'\0';
@@ -1437,7 +1439,9 @@ static pid_t mingw_spawnve_fd(const char *cmd, const char **argv, char **deltaen
 	si.hStdOutput = winansi_get_osfhandle(fhout);
 	si.hStdError = winansi_get_osfhandle(fherr);
 
-	if (xutftowcs_path(wcmd, cmd) < 0)
+	if (*argv && !strcmp(cmd, *argv))
+		wcmd[0] = L'\0';
+	else if (xutftowcs_path(wcmd, cmd) < 0)
 		return -1;
 	if (dir && xutftowcs_path(wdir, dir) < 0)
 		return -1;
@@ -1466,8 +1470,8 @@ static pid_t mingw_spawnve_fd(const char *cmd, const char **argv, char **deltaen
 	wenvblk = make_environment_block(deltaenv);
 
 	memset(&pi, 0, sizeof(pi));
-	ret = CreateProcessW(wcmd, wargs, NULL, NULL, TRUE, flags,
-		wenvblk, dir ? wdir : NULL, &si, &pi);
+	ret = CreateProcessW(*wcmd ? wcmd : NULL, wargs, NULL, NULL, TRUE,
+		flags, wenvblk, dir ? wdir : NULL, &si, &pi);
 
 	free(wenvblk);
 	free(wargs);
@@ -1661,6 +1665,8 @@ char *mingw_getenv(const char *name)
 	if (!w_key)
 		die("Out of memory, (tried to allocate %u wchar_t's)", len_key);
 	xutftowcs(w_key, name, len_key);
+	/* GetEnvironmentVariableW() only sets the last error upon failure */
+	SetLastError(ERROR_SUCCESS);
 	len_value = GetEnvironmentVariableW(w_key, w_value, ARRAY_SIZE(w_value));
 	if (!len_value && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
 		free(w_key);
@@ -2333,6 +2339,30 @@ static void setup_windows_environment(void)
 	/* simulate TERM to enable auto-color (see color.c) */
 	if (!getenv("TERM"))
 		setenv("TERM", "cygwin", 1);
+
+	/* calculate HOME if not set */
+	if (!getenv("HOME")) {
+		/*
+		 * try $HOMEDRIVE$HOMEPATH - the home share may be a network
+		 * location, thus also check if the path exists (i.e. is not
+		 * disconnected)
+		 */
+		if ((tmp = getenv("HOMEDRIVE"))) {
+			struct strbuf buf = STRBUF_INIT;
+			strbuf_addstr(&buf, tmp);
+			if ((tmp = getenv("HOMEPATH"))) {
+				strbuf_addstr(&buf, tmp);
+				if (is_directory(buf.buf))
+					setenv("HOME", buf.buf, 1);
+				else
+					tmp = NULL; /* use $USERPROFILE */
+			}
+			strbuf_release(&buf);
+		}
+		/* use $USERPROFILE if the home share is not available */
+		if (!tmp && (tmp = getenv("USERPROFILE")))
+			setenv("HOME", tmp, 1);
+	}
 }
 
 #if !defined(_MSC_VER)

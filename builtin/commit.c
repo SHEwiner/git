@@ -60,15 +60,18 @@ N_("The previous cherry-pick is now empty, possibly due to conflict resolution.\
 "\n");
 
 static const char empty_cherry_pick_advice_single[] =
-N_("Otherwise, please use 'git reset'\n");
+N_("Otherwise, please use 'git cherry-pick --skip'\n");
 
 static const char empty_cherry_pick_advice_multi[] =
-N_("If you wish to skip this commit, use:\n"
+N_("and then use:\n"
 "\n"
-"    git reset\n"
+"    git cherry-pick --continue\n"
 "\n"
-"Then \"git cherry-pick --continue\" will resume cherry-picking\n"
-"the remaining commits.\n");
+"to resume cherry-picking the remaining commits.\n"
+"If you wish to skip this commit, use:\n"
+"\n"
+"    git cherry-pick --skip\n"
+"\n");
 
 static const char *color_status_slots[] = {
 	[WT_STATUS_HEADER]	  = "header",
@@ -507,7 +510,7 @@ static int run_status(FILE *fp, const char *index_file, const char *prefix, int 
 	s->nowarn = nowarn;
 	s->is_initial = get_oid(s->reference, &oid) ? 1 : 0;
 	if (!s->is_initial)
-		hashcpy(s->sha1_commit, oid.hash);
+		oidcpy(&s->oid_commit, &oid);
 	s->status_format = status_format;
 	s->ignore_submodule_arg = ignore_submodule_arg;
 
@@ -1403,7 +1406,7 @@ int cmd_status(int argc, const char **argv, const char *prefix)
 
 	s.is_initial = get_oid(s.reference, &oid) ? 1 : 0;
 	if (!s.is_initial)
-		hashcpy(s.sha1_commit, oid.hash);
+		oidcpy(&s.oid_commit, &oid);
 
 	s.ignore_submodule_arg = ignore_submodule_arg;
 	s.status_format = status_format;
@@ -1687,7 +1690,7 @@ int cmd_commit(int argc, const char **argv, const char *prefix)
 		      "not exceeded, and then \"git restore --staged :/\" to recover."));
 
 	if (git_env_bool(GIT_TEST_COMMIT_GRAPH, 0) &&
-	    write_commit_graph_reachable(get_object_directory(), 0))
+	    write_commit_graph_reachable(get_object_directory(), 0, NULL))
 		return 1;
 
 	repo_rerere(the_repository, 0);

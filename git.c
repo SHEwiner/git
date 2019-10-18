@@ -369,8 +369,7 @@ static int handle_alias(int *argcp, const char ***argv)
 			die(_("alias '%s' changes environment variables.\n"
 			      "You can use '!git' in the alias to do this"),
 			    alias_command);
-		memmove(new_argv - option_count, new_argv,
-				count * sizeof(char *));
+		MOVE_ARRAY(new_argv - option_count, new_argv, count);
 		new_argv -= option_count;
 
 		if (count < 1)
@@ -385,7 +384,7 @@ static int handle_alias(int *argcp, const char ***argv)
 
 		REALLOC_ARRAY(new_argv, count + *argcp);
 		/* insert after command name */
-		memcpy(new_argv + count, *argv + 1, sizeof(char *) * *argcp);
+		COPY_ARRAY(new_argv + count, *argv + 1, *argcp);
 
 		trace2_cmd_alias(alias_command, new_argv);
 		trace2_cmd_list_config();
@@ -500,6 +499,7 @@ static struct cmd_struct commands[] = {
 	{ "diff-index", cmd_diff_index, RUN_SETUP | NO_PARSEOPT },
 	{ "diff-tree", cmd_diff_tree, RUN_SETUP | NO_PARSEOPT },
 	{ "difftool", cmd_difftool, RUN_SETUP_GENTLY },
+	{ "env--helper", cmd_env__helper },
 	{ "fast-export", cmd_fast_export, RUN_SETUP },
 	{ "fetch", cmd_fetch, RUN_SETUP },
 	{ "fetch-pack", cmd_fetch_pack, RUN_SETUP | NO_PARSEOPT },
@@ -550,12 +550,7 @@ static struct cmd_struct commands[] = {
 	{ "push", cmd_push, RUN_SETUP },
 	{ "range-diff", cmd_range_diff, RUN_SETUP | USE_PAGER },
 	{ "read-tree", cmd_read_tree, RUN_SETUP | SUPPORT_SUPER_PREFIX},
-	/*
-	 * NEEDSWORK: Until the rebase is independent and needs no redirection
-	 * to rebase shell script this is kept as is, then should be changed to
-	 * RUN_SETUP | NEED_WORK_TREE
-	 */
-	{ "rebase", cmd_rebase },
+	{ "rebase", cmd_rebase, RUN_SETUP | NEED_WORK_TREE },
 	{ "rebase--interactive", cmd_rebase__interactive, RUN_SETUP | NEED_WORK_TREE },
 	{ "receive-pack", cmd_receive_pack },
 	{ "reflog", cmd_reflog, RUN_SETUP },
@@ -743,8 +738,6 @@ static int run_argv(int *argcp, const char ***argv)
 		 */
 		if (!done_alias)
 			handle_builtin(*argcp, *argv);
-
-#if 0 // TODO In GFW, need to amend a7924b655e940b06cb547c235d6bed9767929673 to include trace2_ and _tr2 lines.
 		else if (get_builtin(**argv)) {
 			struct argv_array args = ARGV_ARRAY_INIT;
 			int i;
@@ -779,7 +772,6 @@ static int run_argv(int *argcp, const char ***argv)
 				exit(i);
 			die("could not execute builtin %s", **argv);
 		}
-#endif // a7924b655e940b06cb547c235d6bed9767929673
 
 		/* .. then try the external ones */
 		execv_dashed_external(*argv);

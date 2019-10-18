@@ -202,7 +202,6 @@ static void wt_longstatus_print_unmerged_header(struct wt_status *s)
 	} else {
 		status_printf_ln(s, c, _("  (use \"git add/rm <file>...\" as appropriate to mark resolution)"));
 	}
-	status_printf_ln(s, c, "%s", "");
 }
 
 static void wt_longstatus_print_cached_header(struct wt_status *s)
@@ -224,7 +223,6 @@ static void wt_longstatus_print_cached_header(struct wt_status *s)
 					 s->reference);
 	} else
 		status_printf_ln(s, c, _("  (use \"git rm --cached <file>...\" to unstage)"));
-	status_printf_ln(s, c, "%s", "");
 }
 
 static void wt_longstatus_print_dirty_header(struct wt_status *s,
@@ -243,7 +241,6 @@ static void wt_longstatus_print_dirty_header(struct wt_status *s,
 	status_printf_ln(s, c, _("  (use \"git restore <file>...\" to discard changes in working directory)"));
 	if (has_dirty_submodules)
 		status_printf_ln(s, c, _("  (commit or discard the untracked or modified content in submodules)"));
-	status_printf_ln(s, c, "%s", "");
 }
 
 static void wt_longstatus_print_other_header(struct wt_status *s,
@@ -255,7 +252,6 @@ static void wt_longstatus_print_other_header(struct wt_status *s,
 	if (!s->hints)
 		return;
 	status_printf_ln(s, c, _("  (use \"git %s <file>...\" to include in what will be committed)"), how);
-	status_printf_ln(s, c, "%s", "");
 }
 
 static void wt_longstatus_print_trailer(struct wt_status *s)
@@ -1438,6 +1434,8 @@ static void show_cherry_pick_in_progress(struct wt_status *s,
 			status_printf_ln(s, color,
 				_("  (all conflicts fixed: run \"git cherry-pick --continue\")"));
 		status_printf_ln(s, color,
+			_("  (use \"git cherry-pick --skip\" to skip this patch)"));
+		status_printf_ln(s, color,
 			_("  (use \"git cherry-pick --abort\" to cancel the cherry-pick operation)"));
 	}
 	wt_longstatus_print_trailer(s);
@@ -1464,6 +1462,8 @@ static void show_revert_in_progress(struct wt_status *s,
 		else
 			status_printf_ln(s, color,
 				_("  (all conflicts fixed: run \"git revert --continue\")"));
+		status_printf_ln(s, color,
+			_("  (use \"git revert --skip\" to skip this patch)"));
 		status_printf_ln(s, color,
 			_("  (use \"git revert --abort\" to cancel the revert operation)"));
 	}
@@ -2029,7 +2029,7 @@ static void wt_porcelain_v2_print_tracking(struct wt_status *s)
 	char eol = s->null_termination ? '\0' : '\n';
 
 	fprintf(s->fp, "# branch.oid %s%c",
-			(s->is_initial ? "(initial)" : sha1_to_hex(s->sha1_commit)),
+			(s->is_initial ? "(initial)" : oid_to_hex(&s->oid_commit)),
 			eol);
 
 	if (!s->branch)
